@@ -1,13 +1,18 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:perfect_volume_control/perfect_volume_control.dart';
+import 'package:podcast/screens/topic.dart';
 import 'package:podcast/utils/colors.dart';
 import 'package:sleek_circular_slider/sleek_circular_slider.dart';
 
+import '../widgets/back_arrow.dart';
 import '../widgets/backgound.dart';
 import '../widgets/custom_draw.dart';
+import '../widgets/pause_button.dart';
+import '../widgets/play_button.dart';
 
 class Body extends StatefulWidget {
-  Body({
+  const Body({
     Key? key,
   }) : super(key: key);
 
@@ -17,6 +22,29 @@ class Body extends StatefulWidget {
 
 class _BodyState extends State<Body> {
   bool play = true;
+  double currentVol = 0.5;
+  Color muteColor = Colors.white30;
+  Color volumeColor = Colors.white;
+
+  @override
+  void initState() {
+    PerfectVolumeControl.hideUI =
+        true; //set if system UI is hided or not on volume up/down
+    Future.delayed(Duration.zero, () async {
+      currentVol = await PerfectVolumeControl.getVolume();
+      setState(() {
+        //refresh UI
+      });
+    });
+
+    PerfectVolumeControl.stream.listen((volume) {
+      setState(() {
+        currentVol = volume;
+      });
+    });
+
+    super.initState();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -35,20 +63,19 @@ class _BodyState extends State<Body> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Container(
-                        width: 45,
-                        height: 45,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            width: 1,
-                            color: Colors.white.withOpacity(0.50),
-                          ),
-                        ),
-                        child: Icon(
-                          Icons.arrow_back_rounded,
-                          color: Colors.white,
-                        ),
+                      BackArrow(
+                        borderColor: Colors.white,
+                        iconColor: Colors.white,
+                        press: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) {
+                                return TopicPage();
+                              },
+                            ),
+                          );
+                        },
                       ),
                       Row(
                         children: [
@@ -90,12 +117,12 @@ class _BodyState extends State<Body> {
                             children: [
                               Icon(
                                 CupertinoIcons.volume_off,
-                                color: Colors.white30,
+                                color: muteColor,
                                 size: 18,
                               ),
                               Icon(
                                 CupertinoIcons.speaker_2_fill,
-                                color: Colors.white,
+                                color: volumeColor,
                                 size: 18,
                               ),
                             ],
@@ -115,7 +142,7 @@ class _BodyState extends State<Body> {
                           children: [
                             SleekCircularSlider(
                               min: 0,
-                              max: 100,
+                              max: 1,
                               appearance: CircularSliderAppearance(
                                 size: 250,
                                 angleRange: 180,
@@ -137,8 +164,13 @@ class _BodyState extends State<Body> {
                                   dotColor: Colors.white,
                                 ),
                               ),
-                              initialValue: 50,
-                              onChange: (double value) {},
+                              initialValue: currentVol,
+                              onChange: (double value) {
+                                currentVol = value;
+                                PerfectVolumeControl.setVolume(
+                                    currentVol); //set new volume
+                                setState(() {});
+                              },
                             ),
                             Container(
                               margin: EdgeInsets.all(15),
@@ -379,8 +411,11 @@ class _BodyState extends State<Body> {
                           });
                         },
                         child: play == true
-                            ? PlayButton(icon: Icons.play_arrow_rounded)
-                            : PlayButton(icon: Icons.stop_rounded),
+                            ? PlayButton(
+                                diameter: 62,
+                                iconsize: 40,
+                              )
+                            : PauseButton(),
                       ),
                       Container(
                         width: 30,
@@ -483,107 +518,6 @@ class _BodyState extends State<Body> {
               ),
             )
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class PlayButton extends StatelessWidget {
-  const PlayButton({
-    Key? key,
-    required this.icon,
-  }) : super(key: key);
-
-  final IconData icon;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Center(
-        child: Container(
-          width: 62,
-          height: 62,
-          padding: EdgeInsets.all(0.3),
-          decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: LinearGradient(
-                colors: [
-                  Color(0xffEB8C89),
-                  Color(0xffA54982),
-                ],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  offset: Offset(1, 1),
-                  blurRadius: 4,
-                  color: Color(0xffEB8C89),
-                ),
-                BoxShadow(
-                  offset: Offset(-1, -1),
-                  blurRadius: 4,
-                  color: Color(0xffA54982),
-                ),
-              ]),
-          child: Center(
-            child: Container(
-              width: 59,
-              height: 59,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: LinearGradient(
-                  colors: [
-                    Color(0xffF77277).withOpacity(0.75),
-                    Color(0xffBD4D87).withOpacity(0.75),
-                  ],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-              ),
-              child: Center(
-                child: Container(
-                  width: 54,
-                  height: 54,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: LinearGradient(
-                      colors: [
-                        Color(0xffF77277),
-                        Color(0xffBD4D87),
-                      ],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                  ),
-                  child: ShaderMask(
-                    blendMode: BlendMode.srcATop,
-                    shaderCallback: (bounds) => LinearGradient(
-                      colors: [
-                        Colors.white,
-                        Color(0xffF897AA).withOpacity(0.5),
-                        Color(0xffF897AA),
-                      ],
-                      stops: [0.5, 0.6, 0.7],
-                      begin: Alignment.topRight,
-                      end: Alignment.bottomLeft,
-                    ).createShader(bounds),
-                    child: Icon(
-                      icon,
-                      color: Colors.white,
-                      size: 45,
-                    ),
-                  ),
-                  /*child: Icon(
-                    icon,
-                    color: Colors.white,
-                    size: 38,
-                  ),*/
-                ),
-              ),
-            ),
-          ),
         ),
       ),
     );

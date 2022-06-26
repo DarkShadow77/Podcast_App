@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_sound/flutter_sound.dart';
 import 'package:podcast/audio.dart';
-import 'package:podcast/screens/audio.dart';
+
+import 'screens/home.dart';
 
 void main() => runApp(const MyApp());
 
@@ -13,7 +14,7 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'Podcast',
       home: SafeArea(
-        child: AudioPage(),
+        child: HomePage(),
       ),
       debugShowCheckedModeBanner: false,
     );

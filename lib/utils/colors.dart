@@ -12,8 +12,11 @@ class AppColors {
   static final Color second = const Color(0xffF8FBFF);
   static final Color shadow = const Color(0xff3B4056);
   static final Color secondTextColor = const Color(0xff7B7981);
-  static final Color containerone = const Color(0xff985EE1);
-  static final Color containertwo = const Color(0xffF25656);
+  static final Color containerone = const Color(0xff773E87);
+  static final Color containertwo = const Color(0xffCD4771);
+  static final Color containerthree = const Color(0xffF86967);
+  static final Color darkgrey = const Color(0xff2D2F3C);
+  static final Color lightgrey = const Color(0xff51535F);
   static final Color thirdTextColor = const Color(0xffEBEBF5);
   static final Color outerSearchColor = const Color(0xff41455D);
   static final Color searchColor = const Color(0xffDEE2E7);
