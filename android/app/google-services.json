@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "300990009920",
+    "project_id": "podcast-da801",
+    "storage_bucket": "podcast-da801.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:300990009920:android:b4d806ebb065156f6a05a5",
+        "android_client_info": {
+          "package_name": "com.example.podcast"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "300990009920-t5iqq1u4gv4dob0kvl71mqrbtdbld12h.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC3HTFyC-K3kNEQ6-JETTvaAavH_c34FcU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "300990009920-t5iqq1u4gv4dob0kvl71mqrbtdbld12h.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

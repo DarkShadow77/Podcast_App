@@ -4,6 +4,7 @@ class AppColors {
   static final Color mainGreen = const Color(0xff09f8d3);
   static final Color mainBlue = const Color(0xff08f7fe);
   static final Color mainPink = const Color(0xfffe53bb);
+  static final Color subTitle = const Color(0xff4b4d5c);
   static final Color backgroundColor = const Color(0xff191B2A);
   static final Color searchBarColor = const Color(0xff3c3c43);
   static final Color whiteColor = const Color(0xffffffff);

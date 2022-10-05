@@ -1,33 +1,56 @@
+import 'package:audioplayers/audioplayers.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:perfect_volume_control/perfect_volume_control.dart';
-import 'package:podcast/screens/topic.dart';
+import 'package:podcast/AudioPage/options_popover.dart';
+import 'package:podcast/AudioPage/playback_popover.dart';
 import 'package:podcast/utils/colors.dart';
+import 'package:podcast/utils/utils.dart';
 import 'package:sleek_circular_slider/sleek_circular_slider.dart';
 
+import '../widgets/add_playlist_popover.dart';
 import '../widgets/back_arrow.dart';
-import '../widgets/backgound.dart';
+import '../widgets/background.dart';
 import '../widgets/custom_draw.dart';
 import '../widgets/pause_button.dart';
 import '../widgets/play_button.dart';
 
 class Body extends StatefulWidget {
-  const Body({
+  Body({
     Key? key,
+    required this.id,
+    required this.documentSnapshot,
+    required this.asyncSnapshot,
+    required this.streamLength,
   }) : super(key: key);
+
+  int id;
+  final DocumentSnapshot documentSnapshot;
+  final AsyncSnapshot asyncSnapshot;
+  final int streamLength;
 
   @override
   State<Body> createState() => _BodyState();
 }
 
 class _BodyState extends State<Body> {
-  bool play = true;
+  final audioPlayer = AudioPlayer();
+  bool isPlaying = false;
+  Duration duration = Duration.zero;
+  Duration position = Duration.zero;
+
   double currentVol = 0.5;
   Color muteColor = Colors.white30;
   Color volumeColor = Colors.white;
 
+  double audioPlaybackSpeed = 1.0;
+
   @override
   void initState() {
+    super.initState();
+
     PerfectVolumeControl.hideUI =
         true; //set if system UI is hided or not on volume up/down
     Future.delayed(Duration.zero, () async {
@@ -43,185 +66,267 @@ class _BodyState extends State<Body> {
       });
     });
 
-    super.initState();
+    audioPlayer.onPlayerStateChanged.listen((state) {
+      setState(() {
+        isPlaying = state == PlayerState.PLAYING;
+      });
+    });
+
+    audioPlayer.setPlaybackRate(audioPlaybackSpeed);
+
+    audioPlayer.onDurationChanged.listen((newDuration) {
+      setState(() {
+        duration = newDuration;
+      });
+    });
+
+    audioPlayer.onAudioPositionChanged.listen((newPosition) {
+      setState(() {
+        position = newPosition;
+      });
+    });
+
+    audioPlayer.onPlayerCompletion.listen((event) {
+      setState(() {
+        position = Duration(seconds: 0);
+        if (onRepeat == true) {
+          isPlaying = true;
+        } else {
+          isPlaying = false;
+          onRepeat = false;
+        }
+      });
+    });
   }
 
   @override
+  void dispose() {
+    audioPlayer.dispose();
+    // TODO: implement dispose
+    super.dispose();
+  }
+
+  String formatTime(Duration duration) {
+    String twoDigits(int n) => n.toString().padLeft(2, '0');
+    final hours = twoDigits(duration.inHours);
+    final minutes = twoDigits(duration.inMinutes.remainder(60));
+    final seconds = twoDigits(duration.inSeconds.remainder(60));
+
+    return [
+      if (duration.inHours > 0) hours,
+      minutes,
+      seconds,
+    ].join(':');
+  }
+
+  bool onRepeat = false;
+  bool isLiked = false;
+  @override
   Widget build(BuildContext context) {
     Size size = MediaQuery.of(context).size;
+    DocumentSnapshot documentss = widget.asyncSnapshot.data!.docs[widget.id];
+
+    setAudio(DocumentSnapshot<Object?> document) async {
+      audioPlayer.setUrl(document["podcast_url"]);
+    }
+
+    ifExists(String document) async {
+      final snapShot = await FirebaseFirestore.instance
+          .collection('Users')
+          .doc(FirebaseAuth.instance.currentUser!.uid)
+          .collection('likes')
+          .doc(document)
+          .get();
+
+      this.setState(() {
+        isLiked = snapShot.exists;
+      });
+    }
+
+    setAudio(documentss);
+
+    ifExists(documentss['podcast_episode_name']);
+
+    previous() {
+      if (widget.id != 0) {
+        setState(() {
+          widget.id -= 1;
+          audioPlayer.stop();
+
+          duration = Duration.zero;
+          position = Duration.zero;
+        });
+      } else {
+        Utils.showSnackBar("No Previous podcast");
+      }
+    }
+
+    next() {
+      if ((widget.streamLength - 1) > widget.id) {
+        setState(() {
+          audioPlayer.stop();
+
+          duration = Duration.zero;
+          position = Duration.zero;
+
+          widget.id += 1;
+        });
+      } else {
+        Utils.showSnackBar("No next podcast");
+      }
+    }
 
     return Background(
-      child: Container(
-        child: Stack(
-          children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 30, vertical: 12),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      BackArrow(
-                        borderColor: Colors.white,
-                        iconColor: Colors.white,
-                        press: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) {
-                                return TopicPage();
-                              },
-                            ),
-                          );
-                        },
+      child: Stack(
+        children: [
+          Column(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 30, vertical: 12),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    BackArrow(),
+                    IconButton(
+                      icon: Icon(
+                        Icons.more_vert_rounded,
+                        color: Colors.white,
+                        size: 35,
                       ),
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.share_outlined,
-                            color: Colors.white,
-                            size: 22,
-                          ),
-                          SizedBox(
-                            width: 15,
-                          ),
-                          Icon(
-                            Icons.more_vert_rounded,
-                            color: Colors.white,
-                            size: 35,
-                          )
-                        ],
-                      )
-                    ],
-                  ),
+                      onPressed: () {
+                        _optionHandleFABPressed(documentss);
+                      },
+                    )
+                  ],
                 ),
-                Container(
-                  margin: EdgeInsets.only(bottom: 40),
-                  width: 300,
-                  height: 300,
-                  padding: EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Color(0xff171925),
-                  ),
-                  child: Stack(
-                    children: [
-                      Center(
-                        child: Container(
-                          margin: EdgeInsets.symmetric(horizontal: 10),
-                          padding: EdgeInsets.only(bottom: 40),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Icon(
-                                CupertinoIcons.volume_off,
-                                color: muteColor,
-                                size: 18,
-                              ),
-                              Icon(
-                                CupertinoIcons.speaker_2_fill,
-                                color: volumeColor,
-                                size: 18,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      Container(
-                        margin: EdgeInsets.all(12),
-                        child: RotatedBox(quarterTurns: 2, child: CustomArc()),
-                      ),
-                      Container(
-                        padding: EdgeInsets.all(20),
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                        ),
-                        child: Stack(
+              ),
+              Container(
+                margin: EdgeInsets.only(bottom: 40),
+                width: 300,
+                height: 300,
+                padding: EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Color(0xff171925),
+                ),
+                child: Stack(
+                  children: [
+                    Center(
+                      child: Container(
+                        margin: EdgeInsets.symmetric(horizontal: 10),
+                        padding: EdgeInsets.only(bottom: 40),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            SleekCircularSlider(
-                              min: 0,
-                              max: 1,
-                              appearance: CircularSliderAppearance(
-                                size: 250,
-                                angleRange: 180,
-                                startAngle: 180,
-                                counterClockwise: true,
-                                customWidths: CustomSliderWidths(
-                                  progressBarWidth: 5,
-                                  trackWidth: 5,
-                                  handlerSize: 10,
-                                ),
-                                customColors: CustomSliderColors(
-                                  trackColor: Colors.white38,
-                                  progressBarColors: [
-                                    Color(0xfff25656),
-                                    Color(0xff985ee1),
-                                  ],
-                                  hideShadow: true,
-                                  gradientStartAngle: 120,
-                                  dotColor: Colors.white,
-                                ),
-                              ),
-                              initialValue: currentVol,
-                              onChange: (double value) {
-                                currentVol = value;
-                                PerfectVolumeControl.setVolume(
-                                    currentVol); //set new volume
-                                setState(() {});
-                              },
+                            Icon(
+                              CupertinoIcons.volume_off,
+                              color: muteColor,
+                              size: 18,
                             ),
-                            Container(
-                              margin: EdgeInsets.all(15),
+                            Icon(
+                              CupertinoIcons.speaker_2_fill,
+                              color: volumeColor,
+                              size: 18,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    Container(
+                      margin: EdgeInsets.all(12),
+                      child: RotatedBox(quarterTurns: 2, child: CustomArc()),
+                    ),
+                    Container(
+                      padding: EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                      ),
+                      child: Stack(
+                        children: [
+                          SleekCircularSlider(
+                            min: 0,
+                            max: 1,
+                            appearance: CircularSliderAppearance(
+                              size: 250,
+                              angleRange: 180,
+                              startAngle: 180,
+                              counterClockwise: true,
+                              customWidths: CustomSliderWidths(
+                                progressBarWidth: 5,
+                                trackWidth: 5,
+                                handlerSize: 10,
+                              ),
+                              customColors: CustomSliderColors(
+                                trackColor: Colors.white38,
+                                progressBarColors: [
+                                  Color(0xfff25656),
+                                  Color(0xff985ee1),
+                                ],
+                                hideShadow: true,
+                                gradientStartAngle: 120,
+                                dotColor: Colors.white,
+                              ),
+                            ),
+                            initialValue: currentVol,
+                            onChange: (double value) {
+                              currentVol = value;
+                              PerfectVolumeControl.setVolume(
+                                  currentVol); //set new volume
+                              setState(() {});
+                            },
+                          ),
+                          Container(
+                            margin: EdgeInsets.all(15),
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Color(0xff181A27),
+                            ),
+                            child: Container(
+                              padding: EdgeInsets.all(10),
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
                                 color: Color(0xff181A27),
                               ),
                               child: Container(
-                                padding: EdgeInsets.all(10),
+                                padding: EdgeInsets.all(2),
                                 decoration: BoxDecoration(
                                   shape: BoxShape.circle,
-                                  color: Color(0xff181A27),
+                                  color: Color(0xff6B4399),
+                                  image: DecorationImage(
+                                    fit: BoxFit.fill,
+                                    image: NetworkImage(
+                                      documentss['image'],
+                                    ),
+                                  ),
                                 ),
                                 child: Container(
-                                  padding: EdgeInsets.all(2),
+                                  padding: EdgeInsets.all(65),
                                   decoration: BoxDecoration(
                                     shape: BoxShape.circle,
-                                    color: Color(0xff6B4399),
-                                    image: DecorationImage(
-                                      fit: BoxFit.fill,
-                                      image: AssetImage(
-                                          'assets/music_thumbnail.jpg'),
+                                    border: Border.all(
+                                      width: 1,
+                                      color: Colors.white.withOpacity(0.25),
                                     ),
                                   ),
                                   child: Container(
-                                    padding: EdgeInsets.all(65),
+                                    padding: EdgeInsets.all(10),
                                     decoration: BoxDecoration(
                                       shape: BoxShape.circle,
+                                      color: Colors.black38,
                                       border: Border.all(
-                                        width: 1,
-                                        color: Colors.white.withOpacity(0.25),
+                                        width: 0.5,
+                                        color: Colors.white54,
                                       ),
                                     ),
                                     child: Container(
-                                      padding: EdgeInsets.all(10),
                                       decoration: BoxDecoration(
                                         shape: BoxShape.circle,
-                                        color: Colors.black38,
+                                        color: AppColors.backgroundColor,
                                         border: Border.all(
                                           width: 0.5,
-                                          color: Colors.white54,
-                                        ),
-                                      ),
-                                      child: Container(
-                                        decoration: BoxDecoration(
-                                          shape: BoxShape.circle,
-                                          color: AppColors.backgroundColor,
-                                          border: Border.all(
-                                            width: 0.5,
-                                            color: Colors.white60,
-                                          ),
+                                          color: Colors.white60,
                                         ),
                                       ),
                                     ),
@@ -229,296 +334,442 @@ class _BodyState extends State<Body> {
                                 ),
                               ),
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 30),
-                  child: Container(
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.start,
-                              children: [
-                                Container(
-                                  width: 10,
-                                  height: 10,
-                                  decoration: BoxDecoration(
-                                    image: DecorationImage(
-                                      fit: BoxFit.fill,
-                                      image: AssetImage("assets/play.png"),
-                                    ),
-                                  ),
-                                ),
-                                SizedBox(
-                                  width: 5,
-                                ),
-                                Text(
-                                  '15324',
-                                  style: TextStyle(
-                                    color: Colors.white.withOpacity(0.50),
-                                  ),
-                                ),
-                                SizedBox(
-                                  width: 2,
-                                ),
-                                Text(
-                                  'Plays',
-                                  style: TextStyle(
-                                    color: Colors.white.withOpacity(0.50),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            SizedBox(
-                              height: 5,
-                            ),
-                            Text(
-                              'Dele Divoneh',
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 30),
+                child: Container(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          SizedBox(
+                            width: size.width * 0.60,
+                            child: Text(
+                              documentss['podcast_episode_name'],
                               style: TextStyle(
                                 color: Colors.white,
                                 fontWeight: FontWeight.bold,
                                 fontSize: 24,
                               ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
                             ),
-                            SizedBox(
-                              height: 5,
-                            ),
-                            Text(
-                              'Ahllam',
+                          ),
+                          SizedBox(
+                            height: 5,
+                          ),
+                          SizedBox(
+                            width: size.width * 0.50,
+                            child: Text(
+                              documentss['podcast_name'],
                               style: TextStyle(
                                 color: Colors.white.withOpacity(0.50),
                                 fontSize: 18,
                               ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
-                          ],
-                        ),
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Container(
-                              width: 25,
-                              height: 25,
-                              decoration: BoxDecoration(
-                                image: DecorationImage(
-                                  fit: BoxFit.fill,
-                                  image: AssetImage("assets/downloading.png"),
-                                ),
+                          ),
+                        ],
+                      ),
+                      Row(
+                        children: [
+                          Container(
+                            width: 25,
+                            height: 25,
+                            decoration: BoxDecoration(
+                              image: DecorationImage(
+                                fit: BoxFit.fill,
+                                image: AssetImage("assets/downloading.png"),
                               ),
                             ),
-                            SizedBox(
-                              width: 20,
-                            ),
-                            Container(
-                              width: 25,
-                              height: 25,
-                              decoration: BoxDecoration(
-                                image: DecorationImage(
-                                  fit: BoxFit.fill,
-                                  image: AssetImage("assets/add_user.png"),
-                                ),
+                          ),
+                          OutlinedButton(
+                            onPressed: () {
+                              if (isLiked == true) {
+                                Utils.showSnackBar(
+                                    "This document is already liked");
+                              } else {
+                                Map<String, dynamic> likedData = {
+                                  "liked": true,
+                                };
+                                FirebaseFirestore.instance
+                                    .collection('Users')
+                                    .doc(FirebaseAuth.instance.currentUser!.uid)
+                                    .collection('likes')
+                                    .doc(documentss['podcast_episode_name'])
+                                    .set(likedData);
+                              }
+                            },
+                            style: OutlinedButton.styleFrom(
+                              side: BorderSide(
+                                color: Colors.transparent,
                               ),
                             ),
-                            SizedBox(
-                              width: 20,
+                            child: Icon(
+                              isLiked
+                                  ? Icons.favorite_rounded
+                                  : Icons.favorite_outline_rounded,
+                              size: 25,
+                              color: Colors.white70,
                             ),
-                            Container(
-                              width: 25,
-                              height: 25,
-                              decoration: BoxDecoration(
-                                image: DecorationImage(
-                                  fit: BoxFit.fill,
-                                  image: AssetImage("assets/like.png"),
-                                ),
+                          ),
+                          /*Container(
+                            width: 25,
+                            height: 25,
+                            decoration: BoxDecoration(
+                              image: DecorationImage(
+                                fit: BoxFit.fill,
+                                image: AssetImage("assets/like.png"),
                               ),
                             ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                Container(
-                  margin: EdgeInsets.symmetric(vertical: 30),
-                  child: Slider(
-                    value: 10,
-                    activeColor: Colors.white,
-                    inactiveColor: Colors.white.withOpacity(0.50),
-                    thumbColor: Color(0xffEB8C89),
-                    onChanged: null,
-                    max: 100,
-                    min: 0,
-                  ),
-                ),
-                Container(
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        '01:25',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 19,
-                        ),
-                      ),
-                      SizedBox(
-                        width: 2,
-                      ),
-                      Text(
-                        '/',
-                        style: TextStyle(
-                          color: Colors.white.withOpacity(0.50),
-                          fontSize: 14,
-                        ),
-                      ),
-                      Text(
-                        '03:46',
-                        style: TextStyle(
-                          color: Colors.white.withOpacity(0.50),
-                          fontSize: 14,
-                        ),
+                          ),*/
+                        ],
                       ),
                     ],
-                  ),
-                ),
-                Container(
-                  padding: EdgeInsets.symmetric(vertical: 20, horizontal: 30),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      Container(
-                        width: 30,
-                        height: 30,
-                        decoration: BoxDecoration(
-                          image: DecorationImage(
-                            fit: BoxFit.fill,
-                            image: AssetImage("assets/previous.png"),
-                          ),
-                        ),
-                      ),
-                      GestureDetector(
-                        onTap: () {
-                          setState(() {
-                            play = true;
-                          });
-                        },
-                        child: play == true
-                            ? PlayButton(
-                                diameter: 62,
-                                iconsize: 40,
-                              )
-                            : PauseButton(),
-                      ),
-                      Container(
-                        width: 30,
-                        height: 30,
-                        decoration: BoxDecoration(
-                          image: DecorationImage(
-                            fit: BoxFit.fill,
-                            image: AssetImage("assets/next.png"),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Container(
-                  padding: EdgeInsets.symmetric(vertical: 10, horizontal: 40),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Container(
-                        width: 25,
-                        height: 25,
-                        decoration: BoxDecoration(
-                          image: DecorationImage(
-                            fit: BoxFit.fill,
-                            image: AssetImage("assets/playlist.png"),
-                          ),
-                        ),
-                      ),
-                      Container(
-                        width: 25,
-                        height: 25,
-                        decoration: BoxDecoration(
-                          image: DecorationImage(
-                            fit: BoxFit.fill,
-                            image: AssetImage("assets/repeat.png"),
-                          ),
-                        ),
-                      ),
-                      Container(
-                        width: 25,
-                        height: 25,
-                        decoration: BoxDecoration(
-                          image: DecorationImage(
-                            fit: BoxFit.fill,
-                            image: AssetImage("assets/shuffle.png"),
-                          ),
-                        ),
-                      ),
-                      Container(
-                        width: 25,
-                        height: 25,
-                        decoration: BoxDecoration(
-                          image: DecorationImage(
-                            fit: BoxFit.fill,
-                            image: AssetImage("assets/add_playlist.png"),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            Positioned(
-              bottom: 0,
-              left: 0,
-              right: 0,
-              child: Center(
-                child: Container(
-                  width: 70,
-                  height: 50,
-                  decoration: BoxDecoration(
-                    color: Color(0xff464660),
-                    borderRadius: BorderRadius.only(
-                      topLeft: Radius.circular(12),
-                      topRight: Radius.circular(12),
-                    ),
-                  ),
-                  child: ShaderMask(
-                    blendMode: BlendMode.srcATop,
-                    shaderCallback: (bounds) => LinearGradient(
-                      colors: [
-                        Colors.white,
-                        Colors.white.withOpacity(0.50),
-                      ],
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      stops: [
-                        0.5,
-                        0.5,
-                      ],
-                    ).createShader(bounds),
-                    child: Icon(
-                      Icons.keyboard_double_arrow_up_rounded,
-                      size: 30,
-                    ),
                   ),
                 ),
               ),
-            )
-          ],
-        ),
+              SizedBox(
+                height: 10,
+              ),
+              Slider(
+                activeColor: AppColors.containerthree.withOpacity(0.50),
+                inactiveColor: Colors.white10,
+                thumbColor: AppColors.containertwo,
+                min: 0,
+                max: duration.inSeconds.toDouble(),
+                value: position.inSeconds.toDouble(),
+                onChanged: (value) async {
+                  final position = Duration(seconds: value.toInt());
+                  await audioPlayer.seek(position);
+
+                  await audioPlayer.resume();
+                },
+              ),
+              SizedBox(
+                height: 10,
+              ),
+              Container(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      formatTime(position),
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 19,
+                      ),
+                    ),
+                    SizedBox(
+                      width: 2,
+                    ),
+                    Text(
+                      '/',
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.50),
+                        fontSize: 14,
+                      ),
+                    ),
+                    SizedBox(
+                      width: 2,
+                    ),
+                    Text(
+                      formatTime(duration),
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.50),
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: EdgeInsets.symmetric(vertical: 20, horizontal: 30),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    OutlinedButton(
+                      onPressed: () {
+                        previous();
+                      },
+                      child: Icon(Icons.skip_previous_rounded,
+                          color: Colors.white, size: 30),
+                    ),
+                    GestureDetector(
+                      onTap: () async {
+                        if (isPlaying) {
+                          await audioPlayer.pause();
+                        } else {
+                          await audioPlayer.resume();
+                        }
+                      },
+                      child: isPlaying
+                          ? PauseButton()
+                          : PlayButton(
+                              diameter: 62,
+                              iconsize: 40,
+                            ),
+                    ),
+                    OutlinedButton(
+                      onPressed: () {
+                        next();
+                      },
+                      child: Icon(
+                        Icons.skip_next_rounded,
+                        color: Colors.white,
+                        size: 30,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: EdgeInsets.symmetric(
+                  vertical: 10,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    Column(
+                      children: [
+                        OutlinedButton(
+                          onPressed: () {
+                            _addPlaylistHandleFABPressed(documentss);
+                          },
+                          style: OutlinedButton.styleFrom(
+                            side: BorderSide(
+                              color: Colors.transparent,
+                            ),
+                          ),
+                          child: Container(
+                            height: 25,
+                            width: 25,
+                            decoration: BoxDecoration(
+                              image: DecorationImage(
+                                image: AssetImage(
+                                    "assets/images/add-playlist.png"),
+                              ),
+                            ),
+                          ),
+                        ),
+                        Text(
+                          "Add to Playlist",
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                    Column(
+                      children: [
+                        IconButton(
+                          onPressed: () {
+                            if (onRepeat == false) {
+                              audioPlayer.setReleaseMode(ReleaseMode.LOOP);
+                              setState(() {
+                                onRepeat = !onRepeat;
+                              });
+                            } else if (onRepeat == true) {
+                              audioPlayer.setReleaseMode(ReleaseMode.RELEASE);
+                              setState(() {
+                                onRepeat = !onRepeat;
+                              });
+                            }
+                          },
+                          icon: Icon(
+                            Icons.repeat,
+                            color: onRepeat == true
+                                ? Colors.white
+                                : Colors.white30,
+                          ),
+                        ),
+                        Text(
+                          "Repeat",
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                    Column(
+                      children: [
+                        OutlinedButton(
+                          onPressed: () {
+                            _playbackHandleFABPressed();
+                          },
+                          style: OutlinedButton.styleFrom(
+                            backgroundColor: Color(0xff464660),
+                            side: BorderSide(
+                              color: Colors.transparent,
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Text(
+                                "x",
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                ),
+                              ),
+                              SizedBox(
+                                width: 3,
+                              ),
+                              Text(
+                                audioPlaybackSpeed.toString(),
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 14,
+                                ),
+                              ),
+                              SizedBox(
+                                width: 3,
+                              ),
+                              RotatedBox(
+                                quarterTurns: 1,
+                                child: Icon(
+                                  Icons.arrow_forward_ios_rounded,
+                                  color: Colors.white30,
+                                  size: 10,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Text(
+                          "Playback Speed",
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              SizedBox(
+                height: 50,
+              ),
+            ],
+          ),
+          Positioned(
+            bottom: 0,
+            left: 0,
+            right: 0,
+            child: Center(
+              child: Container(
+                width: 70,
+                height: 50,
+                decoration: BoxDecoration(
+                  color: Color(0xff464660),
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(12),
+                    topRight: Radius.circular(12),
+                  ),
+                ),
+                child: ShaderMask(
+                  blendMode: BlendMode.srcATop,
+                  shaderCallback: (bounds) => LinearGradient(
+                    colors: [
+                      Colors.white,
+                      Colors.white.withOpacity(0.50),
+                    ],
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    stops: [
+                      0.5,
+                      0.5,
+                    ],
+                  ).createShader(bounds),
+                  child: Icon(
+                    Icons.keyboard_double_arrow_up_rounded,
+                    size: 30,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _optionHandleFABPressed(DocumentSnapshot documentSnapshot) {
+    showModalBottomSheet(
+      backgroundColor: Colors.transparent,
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => OptionPopover(
+        documentSnapshot: documentSnapshot,
+      ),
+    );
+  }
+
+  void _addPlaylistHandleFABPressed(DocumentSnapshot documentSnapshot) {
+    showModalBottomSheet(
+      backgroundColor: Colors.transparent,
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => AddPlaylistPopover(
+        documentSnapshot: documentSnapshot,
+      ),
+    );
+  }
+
+  void _playbackHandleFABPressed() {
+    showModalBottomSheet(
+      backgroundColor: Colors.transparent,
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => PlaybackPopover(
+        firstPress: () {
+          setState(() {
+            audioPlaybackSpeed = 1;
+            audioPlayer.setPlaybackRate(1.0);
+            Navigator.of(context).pop();
+          });
+        },
+        secondPress: () {
+          setState(() {
+            audioPlaybackSpeed = 2;
+            audioPlayer.setPlaybackRate(2.0);
+            Navigator.of(context).pop();
+          });
+        },
+        thirdPress: () {
+          setState(() {
+            audioPlaybackSpeed = 3;
+            audioPlayer.setPlaybackRate(3.0);
+            Navigator.of(context).pop();
+          });
+        },
+        fourthPress: () {
+          setState(() {
+            audioPlaybackSpeed = 4;
+            audioPlayer.setPlaybackRate(4.0);
+            Navigator.of(context).pop();
+          });
+        },
+        fifthPress: () {
+          setState(() {
+            audioPlaybackSpeed = 5;
+            audioPlayer.setPlaybackRate(5.0);
+            Navigator.of(context).pop();
+          });
+        },
       ),
     );
   }
